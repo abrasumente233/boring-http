@@ -3,10 +3,9 @@ use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use tracing::{debug, error, info, info_span, Instrument};
-use tracing_chrome::ChromeLayerBuilder;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
-use tracing_tree::HierarchicalLayer;
+use tracing::{debug, error, info};
+
+mod trace;
 
 #[tracing::instrument(skip(stream))]
 async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
@@ -42,6 +41,12 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<String, Box<dyn Err
     loop {
         let mut buf = vec![0u8; 1024];
         let read = stream.read(&mut buf).await?;
+
+        // EOF, or the client sent 0 bytes.
+        if read == 0 {
+            break;
+        }
+
         request.extend_from_slice(&buf[..read]);
 
         if request.len() > 4 && &request[request.len() - 4..] == b"\r\n\r\n" {
@@ -71,19 +76,7 @@ async fn run_server() -> Result<(), Box<dyn Error>> {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
-    /*
-    let (chrome_layer, _guard) = ChromeLayerBuilder::new().file("chrome-trace.json").build();
-
-    Registry::default()
-        .with(EnvFilter::from_default_env())
-        .with(
-            HierarchicalLayer::new(4)
-                .with_targets(true)
-                .with_bracketed_fields(true),
-        )
-        .with(chrome_layer)
-        .init();
-    */
+    trace::init()?;
 
     run_server().await
 }
