@@ -1,11 +1,35 @@
+use http::{RequestParts, Response, ResponseParts};
+use std::collections::HashMap;
 use std::error::Error;
 use std::net::SocketAddr;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::str::FromStr;
+use tokio::io::{copy, AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use tracing::{debug, error, info};
 
+mod http;
 mod trace;
+
+trait IntoResponse<B: AsyncRead> {
+    fn into_response(self) -> Response<B>;
+}
+
+impl IntoResponse<&'static [u8]> for &'static str {
+    fn into_response(self) -> Response<&'static [u8]> {
+        //Response::builder().body(self).unwrap()
+        Response {
+            head: ResponseParts {
+                status: http::Status::OK,
+                version: http::Version::Http11,
+                headers: HashMap::new(),
+            },
+            body: http::Body {
+                inner: self.as_bytes(),
+            },
+        }
+    }
+}
 
 #[tracing::instrument(skip(stream))]
 async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
@@ -13,29 +37,40 @@ async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<()
 
     let request = read_http_request(&mut stream).await?;
 
-    debug!(
-        "Incoming request: {}",
-        request.split("\r\n").next().unwrap()
-    );
+    debug!("Incoming request: {:?}", request);
 
-    write_http_response(&mut stream).await?;
+    write_http_response(&mut stream, "Thanks fasterthanlime!\n".into_response()).await?;
 
     info!("Closing connecetion");
 
     Ok(())
 }
 
-#[tracing::instrument(skip(stream))]
-async fn write_http_response(stream: &mut TcpStream) -> Result<(), Box<dyn Error>> {
-    stream.write_all(b"HTTP/1.1 200 OK\r\n").await?;
-    stream.write_all(b"\r\n").await?;
-    stream.write_all(b"Thanks fastthanlime!\n").await?;
+#[tracing::instrument(skip(stream, response))]
+async fn write_http_response<B: AsyncRead + Unpin>(
+    stream: &mut TcpStream,
+    mut response: http::Response<B>, // @TODO: Make this generic
+) -> Result<(), Box<dyn Error>> {
+    // @TODO: This should be called status line or something
+    let request_line = format!(
+        "{:?} {} {}\r\n",
+        response.version(),
+        response.status().as_str(),
+        response.status().reason(),
+    );
+
+    stream.write_all(request_line.as_bytes()).await?; // Assume UTF-8
+                                                      // @TODO: Write request headers
+    stream.write_all(b"\r\n").await?; // End headers
+
+    // Why B must be Unpin?
+    copy(&mut response.body.inner, stream).await?;
 
     Ok(())
 }
 
 #[tracing::instrument(skip(stream))]
-async fn read_http_request(stream: &mut TcpStream) -> Result<String, Box<dyn Error>> {
+async fn read_http_request(stream: &mut TcpStream) -> Result<RequestParts, Box<dyn Error>> {
     let mut request = vec![];
 
     loop {
@@ -54,7 +89,8 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<String, Box<dyn Err
         }
     }
 
-    Ok(String::from_utf8(request)?)
+    let request = std::str::from_utf8(&request)?;
+    Ok(RequestParts::from_str(request)?)
 }
 
 async fn run_server() -> Result<(), Box<dyn Error>> {

@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-http = "0.2.6"
+derive_more = "0.99.17"
+nom = "7.1.1"
 tokio = { version = "1.17.0", features = ["full"] }
 tracing = "0.1.32"
 tracing-chrome = "0.5.0"
