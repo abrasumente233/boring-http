@@ -1,5 +1,5 @@
 use crate::http::*;
-use derive_more::{Error, Display};
+use derive_more::{Display, Error};
 use nom::{branch::alt, bytes::complete::*, combinator::map_res, IResult};
 
 fn parse_method(input: &str) -> IResult<&str, Method> {

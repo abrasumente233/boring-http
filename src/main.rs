@@ -1,13 +1,15 @@
-use http::RequestParts;
+use http::{BoxedBody, RequestParts};
 use router::{Dispatcher, Parameters};
+use std::collections::HashMap;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::io::{copy, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tracing::info;
+use tracing::{error, info};
 
+use crate::http::ResponseParts;
 use crate::router::{get, Router};
 
 mod handler;
@@ -29,7 +31,6 @@ async fn run_server() -> Result<(), Box<dyn Error>> {
 
     let router = Arc::new(Router::new("/check", get(check)));
 
-    /*
     loop {
         let (stream, addr) = listener.accept().await?;
 
@@ -41,7 +42,6 @@ async fn run_server() -> Result<(), Box<dyn Error>> {
             }
         });
     }
-    */
     Ok(())
 }
 
@@ -57,7 +57,17 @@ async fn handle_connection<R: Dispatcher>(
 
     //debug!("Incoming request: {:?}", request);
 
-    let resp = router.dispatch(&request).await.unwrap();
+    let resp = router
+        .dispatch(&request)
+        .await
+        .unwrap_or_else(|| http::Response {
+            head: ResponseParts {
+                status: http::Status::OK,
+                version: http::Version::Http11,
+                headers: HashMap::new(),
+            },
+            body: BoxedBody::empty(),
+        });
 
     write_http_response(&mut stream, resp).await?;
 
@@ -113,6 +123,7 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<RequestParts, Box<d
     Ok(RequestParts::from_str(request)?)
 }
 
-async fn check(request: &RequestParts, params: Parameters) -> &'static str {
+//async fn check<'a>(request: &'a RequestParts, params: Parameters) -> &'static str {
+async fn check<'a>() -> &'static str {
     "Thanks fasterthanlime!"
 }

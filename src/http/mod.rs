@@ -7,8 +7,10 @@ pub struct BoxedBody {
 }
 
 impl BoxedBody {
-    fn empty() -> Self {
-        BoxedBody { inner: Box::new(&[] as &[u8]) }
+    pub fn empty() -> Self {
+        BoxedBody {
+            inner: Box::new(&[] as &[u8]),
+        }
     }
 }
 

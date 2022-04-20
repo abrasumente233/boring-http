@@ -8,20 +8,20 @@ use crate::http::*;
 type Parameters = Vec<(String, String)>;
 
 #[async_trait]
-pub trait Handler<'a> {
+pub trait Handler {
     // @FIXME: We only handle the request headers now.
-    async fn handle(&self, request: &'a RequestParts, params: Parameters) -> Option<Response>;
+    async fn handle(&self) -> Option<Response>;
 }
 
 #[async_trait]
-impl<'a, F, Fut, Res> Handler<'a> for F
+impl<F, Fut, Res> Handler for F
 where
-    F: Fn(&RequestParts, Parameters) -> Fut + Sync,
+    F: Fn() -> Fut + Send + Sync, // @FIXME: 'static?
     Fut: Future<Output = Res> + Send,
     Res: IntoResponse,
 {
-    async fn handle(&self, request: &RequestParts, params: Parameters) -> Option<Response> {
-        Some(self(request, params).await.into_response())
+    async fn handle(&self) -> Option<Response> {
+        Some(self().await.into_response())
     }
 }
 
@@ -31,7 +31,7 @@ pub trait IntoResponse {
 }
 
 //impl<'a> IntoResponse for &'a str {
-    //type BodyType = &'a [u8];
+//type BodyType = &'a [u8];
 impl IntoResponse for &'static str {
     type BodyType = &'static [u8];
     fn into_response(self) -> Response {

@@ -1,7 +1,5 @@
 // Largely inspired by https://gist.github.com/jFransham/e41835f409e264212e4e66313adafc8b
 
-use std::marker::PhantomData;
-
 use async_trait::async_trait;
 use regex::Regex;
 
@@ -43,7 +41,7 @@ impl<'t> PathPattern<'t> {
             .collect::<Vec<_>>()
             .join("/");
 
-        dbg!("built re pattern: {}", pattern);
+        dbg!("built re pattern: {}", &pattern);
 
         PathPattern {
             re: Regex::new(&pattern).unwrap(),
@@ -89,36 +87,33 @@ impl<'t> PathPattern<'t> {
 }
 
 // 'a is the lifetime of path pattern &str, sad, we're adding it back.
-pub struct Router<'a, 'h, T: Handler<'h>> {
+pub struct Router<'a, T: Handler> {
     method: Method,
     pattern: PathPattern<'a>,
     handler: T,
-    phantom: PhantomData<&'h ()>,
 }
 
-impl<'t1, 'h1, T1: Handler<'h1>> Router<'t1, 'h1, T1> {
+impl<'t1, T1: Handler> Router<'t1, T1> {
     // We need special handling for the first route, which is not nice.
-    pub fn new(pattern: &'t1 str, method_wrapper: MethodWrapper<'h1, T1>) -> Self {
+    pub fn new(pattern: &'t1 str, method_wrapper: MethodWrapper<T1>) -> Self {
         Self {
             pattern: PathPattern::new(pattern),
             method: method_wrapper.1,
             handler: method_wrapper.0,
-            phantom: PhantomData,
         }
     }
 
-    pub fn route<'t2, 'h2, T2: Handler<'h2>>(
+    pub fn route<'t2, T2: Handler>(
         self,
         pattern: &'t2 str,
-        method_wrapper: MethodWrapper<'h2, T2>,
-    ) -> Chain<Router<'t1, 'h1, T1>, Router<'t2, 'h2, T2>> {
+        method_wrapper: MethodWrapper<T2>,
+    ) -> Chain<Router<'t1, T1>, Router<'t2, T2>> {
         Chain {
             first: self,
             second: Router {
                 pattern: PathPattern::new(pattern),
                 method: method_wrapper.1,
                 handler: method_wrapper.0,
-                phantom: PhantomData,
             },
         }
     }
@@ -130,18 +125,17 @@ pub struct Chain<A, B> {
 }
 
 impl<T1, T2> Chain<T1, T2> {
-    pub fn route<'t, 'h3, T3: Handler<'h3>>(
+    pub fn route<'t, T3: Handler>(
         self,
         pattern: &'t str,
-        method_wrapper: MethodWrapper<'h3, T3>,
-    ) -> Chain<Chain<T1, T2>, Router<'t, 'h3, T3>> {
+        method_wrapper: MethodWrapper<T3>,
+    ) -> Chain<Chain<T1, T2>, Router<'t, T3>> {
         Chain {
             first: self,
             second: Router {
                 pattern: PathPattern::new(pattern),
                 method: method_wrapper.1,
                 handler: method_wrapper.0,
-                phantom: PhantomData,
             },
         }
     }
@@ -157,15 +151,15 @@ fn times2(params: Parameters, x: i32) -> i32 {
 
 #[async_trait]
 pub trait Dispatcher {
-    async fn dispatch(&self, request: &RequestParts) -> Option<Response>;
+    async fn dispatch<'a>(&self, request: &'a RequestParts) -> Option<Response>;
 }
 
 #[async_trait]
-impl<'t, 'a, T: Handler<'a> + Send + Sync> Dispatcher for Router<'t, 'a, T> {
-    async fn dispatch(&self, request: &RequestParts) -> Option<Response> {
+impl<'t, T: Handler + Send + Sync> Dispatcher for Router<'t, T> {
+    async fn dispatch<'a>(&self, request: &'a RequestParts) -> Option<Response> {
         // @TODO: Capture groups
         if let Some(params) = self.pattern.captures(&request.uri) {
-            self.handler.handle(request, params).await // Assert Some
+            self.handler.handle().await // Assert Some
         } else {
             None
         }
@@ -174,7 +168,7 @@ impl<'t, 'a, T: Handler<'a> + Send + Sync> Dispatcher for Router<'t, 'a, T> {
 
 #[async_trait]
 impl<T1: Dispatcher + Send + Sync, T2: Dispatcher + Send + Sync> Dispatcher for Chain<T1, T2> {
-    async fn dispatch(&self, request: &RequestParts) -> Option<Response> {
+    async fn dispatch<'a>(&self, request: &'a RequestParts) -> Option<Response> {
         let r1 = self.first.dispatch(request).await;
 
         match r1 {
@@ -184,12 +178,12 @@ impl<T1: Dispatcher + Send + Sync, T2: Dispatcher + Send + Sync> Dispatcher for 
     }
 }
 
-pub struct MethodWrapper<'a, H: Handler<'a>>(H, Method, PhantomData<&'a ()>);
+pub struct MethodWrapper<H: Handler>(H, Method);
 
-pub fn get<'a, H: Handler<'a>>(handler: H) -> MethodWrapper<'a, H> {
-    MethodWrapper(handler, Method::Get, PhantomData)
+pub fn get<H: Handler>(handler: H) -> MethodWrapper<H> {
+    MethodWrapper(handler, Method::Get)
 }
 
-pub fn post<'a, H: Handler<'a>>(handler: H) -> MethodWrapper<'a, H> {
-    MethodWrapper(handler, Method::Post, PhantomData)
+pub fn post<H: Handler>(handler: H) -> MethodWrapper<H> {
+    MethodWrapper(handler, Method::Post)
 }
