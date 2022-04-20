@@ -29,7 +29,9 @@ async fn run_server() -> Result<(), Box<dyn Error>> {
 
     info!("Listening at port :4444");
 
-    let router = Arc::new(Router::new("/check", get(check)));
+    let router = Router::new("/check", get(check)).route("/query/{id}", get(query));
+
+    let router = Arc::new(router);
 
     loop {
         let (stream, addr) = listener.accept().await?;
@@ -42,7 +44,6 @@ async fn run_server() -> Result<(), Box<dyn Error>> {
             }
         });
     }
-    Ok(())
 }
 
 #[tracing::instrument(skip(stream, router))]
@@ -124,6 +125,10 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<RequestParts, Box<d
 }
 
 //async fn check<'a>(request: &'a RequestParts, params: Parameters) -> &'static str {
-async fn check<'a>() -> &'static str {
+async fn check<'a>(_params: Parameters) -> &'static str {
     "Thanks fasterthanlime!"
+}
+
+async fn query<'a>(params: Parameters) -> String {
+    format!("Querying {:?}!", params)
 }

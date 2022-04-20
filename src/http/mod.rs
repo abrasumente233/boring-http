@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{collections::HashMap, fmt, str::FromStr};
 
 use tokio::io::AsyncRead;

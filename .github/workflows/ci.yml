@@ -76,7 +76,7 @@ jobs:
       - name: Archive binaries
         uses: actions/upload-artifact@v3
         with:
-          name: binaries
+          name: ${{ matrix.target }}
           path: |
             boring-http*
       - name: Publish

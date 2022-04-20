@@ -1,7 +1,9 @@
 // Largely inspired by https://gist.github.com/jFransham/e41835f409e264212e4e66313adafc8b
+#![allow(dead_code)]
 
 use async_trait::async_trait;
 use regex::Regex;
+use tracing::info;
 
 use crate::http::Response;
 use crate::{
@@ -41,7 +43,7 @@ impl<'t> PathPattern<'t> {
             .collect::<Vec<_>>()
             .join("/");
 
-        dbg!("built re pattern: {}", &pattern);
+        info!("built router pattern: {}", &pattern);
 
         PathPattern {
             re: Regex::new(&pattern).unwrap(),
@@ -141,14 +143,6 @@ impl<T1, T2> Chain<T1, T2> {
     }
 }
 
-fn square(params: Parameters, x: i32) -> i32 {
-    x * x
-}
-
-fn times2(params: Parameters, x: i32) -> i32 {
-    x * 2
-}
-
 #[async_trait]
 pub trait Dispatcher {
     async fn dispatch<'a>(&self, request: &'a RequestParts) -> Option<Response>;
@@ -159,7 +153,8 @@ impl<'t, T: Handler + Send + Sync> Dispatcher for Router<'t, T> {
     async fn dispatch<'a>(&self, request: &'a RequestParts) -> Option<Response> {
         // @TODO: Capture groups
         if let Some(params) = self.pattern.captures(&request.uri) {
-            self.handler.handle().await // Assert Some
+            info!("Selected router: {}", &self.pattern.re);
+            self.handler.handle(params).await // Assert Some
         } else {
             None
         }
@@ -187,3 +182,13 @@ pub fn get<H: Handler>(handler: H) -> MethodWrapper<H> {
 pub fn post<H: Handler>(handler: H) -> MethodWrapper<H> {
     MethodWrapper(handler, Method::Post)
 }
+
+/*
+fn square(params: Parameters, x: i32) -> i32 {
+    x * x
+}
+
+fn times2(params: Parameters, x: i32) -> i32 {
+    x * 2
+}
+*/
