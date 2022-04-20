@@ -57,7 +57,7 @@ async fn handle_connection<R: Dispatcher>(
 
     //debug!("Incoming request: {:?}", request);
 
-    let resp = router.dispatch(request).await.unwrap();
+    let resp = router.dispatch(&request).await.unwrap();
 
     write_http_response(&mut stream, resp).await?;
 
@@ -113,6 +113,6 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<RequestParts, Box<d
     Ok(RequestParts::from_str(request)?)
 }
 
-async fn check(request: RequestParts, params: Parameters) -> &'static str {
+async fn check(request: &RequestParts, params: Parameters) -> &'static str {
     "Thanks fasterthanlime!"
 }
