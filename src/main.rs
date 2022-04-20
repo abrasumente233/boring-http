@@ -1,45 +1,65 @@
-use http::{RequestParts, Response, ResponseParts};
-use std::collections::HashMap;
+use http::RequestParts;
+use router::{Dispatcher, Parameters};
 use std::error::Error;
 use std::net::SocketAddr;
 use std::str::FromStr;
-use tokio::io::{copy, AsyncRead, AsyncReadExt, AsyncWriteExt};
+use std::sync::Arc;
+use tokio::io::{copy, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tracing::info;
 
-use tracing::{debug, error, info};
+use crate::router::{get, Router};
 
+mod handler;
 mod http;
+mod router;
 mod trace;
 
-trait IntoResponse<B: AsyncRead> {
-    fn into_response(self) -> Response<B>;
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn Error>> {
+    trace::init()?;
+
+    run_server().await
 }
 
-impl IntoResponse<&'static [u8]> for &'static str {
-    fn into_response(self) -> Response<&'static [u8]> {
-        //Response::builder().body(self).unwrap()
-        Response {
-            head: ResponseParts {
-                status: http::Status::OK,
-                version: http::Version::Http11,
-                headers: HashMap::new(),
-            },
-            body: http::Body {
-                inner: self.as_bytes(),
-            },
-        }
+async fn run_server() -> Result<(), Box<dyn Error>> {
+    let listener = TcpListener::bind("127.0.0.1:4444").await?;
+
+    info!("Listening at port :4444");
+
+    let router = Arc::new(Router::new("/check", get(check)));
+
+    /*
+    loop {
+        let (stream, addr) = listener.accept().await?;
+
+        let router = Arc::clone(&router);
+
+        tokio::spawn(async move {
+            if let Err(err) = handle_connection(stream, addr, router).await {
+                error!(%err, "Error handling connection");
+            }
+        });
     }
+    */
+    Ok(())
 }
 
-#[tracing::instrument(skip(stream))]
-async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
+#[tracing::instrument(skip(stream, router))]
+async fn handle_connection<R: Dispatcher>(
+    mut stream: TcpStream,
+    addr: SocketAddr,
+    router: Arc<R>,
+) -> Result<(), Box<dyn Error>> {
     info!("Accepted connection from {addr}");
 
     let request = read_http_request(&mut stream).await?;
 
-    debug!("Incoming request: {:?}", request);
+    //debug!("Incoming request: {:?}", request);
 
-    write_http_response(&mut stream, "Thanks fasterthanlime!\n".into_response()).await?;
+    let resp = router.dispatch(request).await.unwrap();
+
+    write_http_response(&mut stream, resp).await?;
 
     info!("Closing connecetion");
 
@@ -47,9 +67,9 @@ async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<()
 }
 
 #[tracing::instrument(skip(stream, response))]
-async fn write_http_response<B: AsyncRead + Unpin>(
+async fn write_http_response(
     stream: &mut TcpStream,
-    mut response: http::Response<B>, // @TODO: Make this generic
+    mut response: http::Response, // @TODO: Make this generic
 ) -> Result<(), Box<dyn Error>> {
     // @TODO: This should be called status line or something
     let request_line = format!(
@@ -93,26 +113,6 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<RequestParts, Box<d
     Ok(RequestParts::from_str(request)?)
 }
 
-async fn run_server() -> Result<(), Box<dyn Error>> {
-    let listener = TcpListener::bind("127.0.0.1:4444").await?;
-
-    info!("Listening at port :4444");
-
-    loop {
-        let (stream, addr) = listener.accept().await?;
-
-        //drop(stream);
-        tokio::spawn(async move {
-            if let Err(err) = handle_connection(stream, addr).await {
-                error!(%err, "Error handling connection");
-            }
-        });
-    }
-}
-
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn Error>> {
-    trace::init()?;
-
-    run_server().await
+async fn check(request: RequestParts, params: Parameters) -> &'static str {
+    "Thanks fasterthanlime!"
 }

@@ -2,24 +2,23 @@ use std::{collections::HashMap, fmt, str::FromStr};
 
 use tokio::io::AsyncRead;
 
-#[derive(Debug, PartialEq)]
-pub struct Body<B> {
-    pub inner: B,
+pub struct BoxedBody {
+    pub inner: Box<dyn AsyncRead + Send + Sync>,
 }
 
-impl Body<()> {
+impl BoxedBody {
     fn empty() -> Self {
-        Body { inner: () }
+        BoxedBody { inner: Box::new(&[] as &[u8]) }
     }
 }
 
-#[derive(Debug)]
-pub struct Response<B: AsyncRead> {
+//#[derive(Debug)]
+pub struct Response {
     pub head: ResponseParts,
-    pub body: Body<B>,
+    pub body: BoxedBody,
 }
 
-impl<B: AsyncRead> Response<B> {
+impl Response {
     pub fn version(&self) -> Version {
         self.head.version
     }
@@ -86,10 +85,10 @@ impl Status {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Request<B> {
+//#[derive(Debug, PartialEq)]
+pub struct Request {
     pub head: RequestParts,
-    pub body: Body<B>,
+    pub body: BoxedBody, // @FIXME
 }
 
 #[derive(Debug, PartialEq)]
