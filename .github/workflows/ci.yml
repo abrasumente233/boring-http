@@ -14,6 +14,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     strategy:
       matrix:
@@ -72,7 +73,14 @@ jobs:
           cd target/${{ matrix.target }}/release          
           tar czvf ../../../boring-http-${{ matrix.target }}.tar.gz boring-http
           cd -
+      - name: Archive binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: |
+            boring-http*
       - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         # TODO: if any of the build step fails, the release should be deleted.
         with:
