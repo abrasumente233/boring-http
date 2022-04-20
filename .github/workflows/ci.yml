@@ -13,7 +13,6 @@ jobs:
 
   test:
     name: Test
-    needs: [style]
     runs-on: ubuntu-latest
 
     strategy:
@@ -35,13 +34,11 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: ${{ matrix.features }}
 
       - name: Test
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: ${{ matrix.features }}
 
   deploy:
     name: deploy
