@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, fmt, str::FromStr};
 
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, empty};
 
 pub struct BoxedBody {
     pub inner: Box<dyn AsyncRead + Send + Sync + 'static + Unpin>,
@@ -11,7 +11,7 @@ pub struct BoxedBody {
 impl BoxedBody {
     pub fn empty() -> Self {
         BoxedBody {
-            inner: Box::new(&[] as &[u8]),
+            inner: Box::new(empty()),
         }
     }
 }
